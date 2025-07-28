@@ -1,0 +1,86 @@
+// Bibliotheken für I2C-Kommunikation und LCD-Display
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h> 
+
+// Pin-Definitionen für die drei LEDs
+int ROT = 5;        // Rote LED an Pin 5
+int GELB = 6;       // Gelbe LED an Pin 6
+int GRUN = 7;       // Grüne LED an Pin 7
+
+// Temperatursensor und Variablen
+int TMP36 = A0;           // TMP36 Temperatursensor an analogem Pin A0
+float temperatur = 0;     // Variable für berechnete Temperatur in °C
+int sensorwert;           // Roher ADC-Wert vom Temperatursensor
+int t = 1000;             // Delay-Zeit in Millisekunden (1 Sekunde)
+
+// LCD-Display Objekt erstellen (I2C-Adresse 0x27, 16x2 Zeichen)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  // Serielle Kommunikation mit 9600 Baud starten
+  Serial.begin(9600);
+  
+  // LED-Pins als Ausgänge konfigurieren
+  pinMode(ROT, OUTPUT);
+  pinMode(GELB, OUTPUT);
+  pinMode(GRUN, OUTPUT);
+  
+  // LCD initialisieren und Hintergrundbeleuchtung einschalten
+  lcd.init(); 
+  lcd.backlight();
+}
+
+void loop() {
+  // Rote LED standardmäßig einschalten (wird später je nach Temperatur geändert)
+  digitalWrite(ROT, HIGH);
+  
+  // Analogwert vom TMP36-Sensor lesen (0-1023)
+  sensorwert = analogRead(TMP36);
+  
+  // ADC-Wert in Temperatur umrechnen
+  // Map-Funktion: 0-410 ADC entspricht -50°C bis +150°C
+  // Hinweis: Diese Kalibrierung ist vereinfacht und möglicherweise ungenau
+  temperatur = map(sensorwert, 0, 410, -50, 150);
+  
+  // Temperaturwert über serielle Schnittstelle ausgeben
+  Serial.print("Temperatur: ");
+  Serial.print(temperatur);
+  Serial.println(" °C");
+  
+  // LED-Steuerung basierend auf Temperaturbereichen
+  if (temperatur >= 35 && temperatur < 42) {
+    // Temperaturbereich 35-41°C: Gelbe LED (Warnung)
+    digitalWrite(ROT, LOW);    // Rote LED aus
+    digitalWrite(GRUN, LOW);   // Grüne LED aus
+    digitalWrite(GELB, HIGH);  // Gelbe LED an
+    
+  } else if (temperatur >= 42) {
+    // Temperatur >= 42°C: Grüne LED (Zieltemperatur erreicht)
+    digitalWrite(ROT, LOW);    // Rote LED aus
+    digitalWrite(GRUN, HIGH);  // Grüne LED an
+    digitalWrite(GELB, LOW);   // Gelbe LED aus
+    
+    // Spezielle Nachricht auf LCD bei Zieltemperatur
+    lcd.clear();               // Display löschen
+    lcd.setCursor(0, 0);       // Cursor auf erste Zeile
+    lcd.print("Codeword:");    // Erste Zeile: "Codeword:"
+    lcd.setCursor(0, 1);       // Cursor auf zweite Zeile
+    lcd.print("Raumschiff");   // Zweite Zeile: "Raumschiff"
+    
+  } else {
+    // Temperatur < 35°C: Rote LED (zu kalt)
+    digitalWrite(ROT, HIGH);   // Rote LED an
+    digitalWrite(GRUN, LOW);   // Grüne LED aus
+    digitalWrite(GELB, LOW);   // Gelbe LED aus
+    
+    // Warteanzeige auf LCD
+    lcd.clear();               // Display löschen
+    lcd.setCursor(0, 0);       // Cursor auf erste Zeile
+    lcd.print("Warte auf");    // Erste Zeile: "Warte auf"
+    lcd.setCursor(0, 1);       // Cursor auf zweite Zeile
+    lcd.print("42 Grad...");   // Zweite Zeile: "42 Grad..."
+  }
+  
+  // Pause von 1 Sekunde vor nächster Messung
+  delay(t);
+}
