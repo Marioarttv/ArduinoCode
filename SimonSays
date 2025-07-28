@@ -1,0 +1,220 @@
+// Simon Says Arduino Script - Independent Level Buttons
+// Pin definitions - LEDs
+int LEDblau = 6;    // Blaue LED an Pin 6
+int LEDgelb = 5;    // Gelbe LED an Pin 5
+int LEDgrun = 4;    // Grüne LED an Pin 4
+int LEDrot = 3;     // Rote LED an Pin 3
+
+// Pin definitions - Buttons  
+int buttonLevel1 = 13;    // Button für Level 1 (4er Sequenz)
+int buttonLevel2 = 11;    // Button für Level 2 (7er Sequenz)
+int buttonLevel3 = 12;    // Button für Level 3 (10er Sequenz)
+
+// Button-Zustandsvariablen
+int button1Status = 0;
+int button2Status = 0;
+int button3Status = 0;
+
+// Entprellung (Debouncing) - verhindert Mehrfachauslösung
+unsigned long lastButton1Press = 0;
+unsigned long lastButton2Press = 0;
+unsigned long lastButton3Press = 0;
+const unsigned long debounceDelay = 200;  // 200ms Entprellungszeit
+
+// Level-Sequenzen (exakt passend zur Website)
+// Level 1: Rot → Blau → Gelb → Grün (4 Schritte)
+int level1[] = {3, 6, 5, 4};
+int level1Length = 4;
+
+// Level 2: Rot → Gelb → Grün → Blau → Rot → Grün → Gelb (7 Schritte)
+int level2[] = {3, 5, 4, 6, 3, 4, 5};
+int level2Length = 7;
+
+// Level 3: Grün → Rot → Blau → Gelb → Grün → Rot → Gelb → Blau → Grün → Rot (10 Schritte)
+int level3[] = {4, 3, 6, 5, 4, 3, 5, 6, 4, 3};
+int level3Length = 10;
+
+void setup() {
+  // LED-Pins als Outputs definieren
+  pinMode(LEDblau, OUTPUT);
+  pinMode(LEDgelb, OUTPUT);
+  pinMode(LEDrot, OUTPUT);
+  pinMode(LEDgrun, OUTPUT);
+  
+  // Button-Pins als Inputs definieren (externe Pull-up Widerstände)
+  pinMode(buttonLevel1, INPUT);
+  pinMode(buttonLevel2, INPUT);
+  pinMode(buttonLevel3, INPUT);
+  
+  // Serielle Kommunikation für Debugging und Thematik
+  Serial.begin(9600);
+  Serial.println("========================================");
+  Serial.println("SECURITY BYPASS - Neural Pattern Protocol");
+  Serial.println("========================================");
+  Serial.println("Button Controls:");
+  Serial.println("Pin 13 - Level 1 (4 sequence)");
+  Serial.println("Pin 11 - Level 2 (7 sequence)");
+  Serial.println("Pin 12 - Level 3 (10 sequence)");
+  Serial.println("Ready for security bypass...");
+  
+  // Initialer Zustand - alle LEDs aus
+  turnOffAllLEDs();
+  
+  // Startup-Sequenz zeigt Systembereitschaft
+  startupSequence();
+}
+
+void loop() {
+  // Alle Button-Zustände lesen
+  button1Status = digitalRead(buttonLevel1);
+  button2Status = digitalRead(buttonLevel2);
+  button3Status = digitalRead(buttonLevel3);
+  
+  // Level 1 Button prüfen
+  if (button1Status == HIGH && (millis() - lastButton1Press > debounceDelay)) {
+    lastButton1Press = millis();
+    
+    Serial.println(">>> SECURITY LEVEL 1 ACTIVATED <<<");
+    playSequence(level1, level1Length, 1);
+    
+    // Warten bis Button losgelassen wird
+    while (digitalRead(buttonLevel1) == HIGH) {
+      delay(10);
+    }
+  }
+  
+  // Level 2 Button prüfen
+  if (button2Status == HIGH && (millis() - lastButton2Press > debounceDelay)) {
+    lastButton2Press = millis();
+    
+    Serial.println(">>> SECURITY LEVEL 2 ACTIVATED <<<");
+    playSequence(level2, level2Length, 2);
+    
+    // Warten bis Button losgelassen wird
+    while (digitalRead(buttonLevel2) == HIGH) {
+      delay(10);
+    }
+  }
+  
+  // Level 3 Button prüfen
+  if (button3Status == HIGH && (millis() - lastButton3Press > debounceDelay)) {
+    lastButton3Press = millis();
+    
+    Serial.println(">>> SECURITY LEVEL 3 ACTIVATED <<<");
+    playSequence(level3, level3Length, 3);
+    
+    // Warten bis Button losgelassen wird
+    while (digitalRead(buttonLevel3) == HIGH) {
+      delay(10);
+    }
+  }
+}
+
+// Hauptfunktion: Spielt eine LED-Sequenz ab
+void playSequence(int sequence[], int length, int level) {
+  Serial.print("Playing sequence: ");
+  
+  // Farbsequenz zur Referenz ausgeben
+  for (int i = 0; i < length; i++) {
+    Serial.print(getColorName(sequence[i]));
+    if (i < length - 1) Serial.print(" → ");
+  }
+  Serial.println();
+  
+  delay(500); // Kurze Pause vor Sequenzstart
+  
+  // Startup-Indikator (alle LEDs kurz blinken)
+  flashAllLEDs(100);
+  delay(300);
+  
+  // Eigentliche Sequenz abspielen
+  for (int i = 0; i < length; i++) {
+    Serial.print("Step ");
+    Serial.print(i + 1);
+    Serial.print("/");
+    Serial.print(length);
+    Serial.print(": ");
+    Serial.println(getColorName(sequence[i]));
+    
+    // LED einschalten
+    digitalWrite(sequence[i], HIGH);
+    
+    // Blink-Dauer (600ms für gute Sichtbarkeit)
+    delay(600);
+    
+    // LED ausschalten
+    digitalWrite(sequence[i], LOW);
+    
+    // Pause zwischen Blinks (adaptiv je nach Level)
+    int gapDelay = (level == 3) ? 250 : 300;  // Kürzere Pausen bei Level 3
+    delay(gapDelay);
+  }
+  
+  Serial.print("Level ");
+  Serial.print(level);
+  Serial.println(" sequence complete!");
+  Serial.println("Players should now input sequence on website.");
+  Serial.println("----------------------------------------");
+  
+  // Erfolg-Indikator - alle LEDs blinken kurz
+  delay(400);
+  flashAllLEDs(150);
+}
+
+// Hilfsfunktion: Alle LEDs ausschalten
+void turnOffAllLEDs() {
+  digitalWrite(LEDrot, LOW);
+  digitalWrite(LEDgelb, LOW);
+  digitalWrite(LEDgrun, LOW);
+  digitalWrite(LEDblau, LOW);
+}
+
+// Hilfsfunktion: Alle LEDs gleichzeitig blinken lassen
+void flashAllLEDs(int duration) {
+  digitalWrite(LEDrot, HIGH);
+  digitalWrite(LEDgelb, HIGH);
+  digitalWrite(LEDgrun, HIGH);
+  digitalWrite(LEDblau, HIGH);
+  delay(duration);
+  turnOffAllLEDs();
+}
+
+// Hilfsfunktion: Pin-Nummer zu Farbname konvertieren
+String getColorName(int pin) {
+  switch (pin) {
+    case 3: return "RED";
+    case 4: return "GREEN";
+    case 5: return "YELLOW";
+    case 6: return "BLUE";
+    default: return "UNKNOWN";
+  }
+}
+
+// Startup-Sequenz: System-Initialisierung anzeigen
+void startupSequence() {
+  Serial.println("Initializing security bypass system...");
+  
+  // Schneller Test aller LEDs
+  digitalWrite(LEDrot, HIGH);
+  delay(150);
+  digitalWrite(LEDrot, LOW);
+  
+  digitalWrite(LEDgelb, HIGH);
+  delay(150);
+  digitalWrite(LEDgelb, LOW);
+  
+  digitalWrite(LEDgrun, HIGH);
+  delay(150);
+  digitalWrite(LEDgrun, LOW);
+  
+  digitalWrite(LEDblau, HIGH);
+  delay(150);
+  digitalWrite(LEDblau, LOW);
+  
+  delay(500);
+  
+  // Alle LEDs blinken = System bereit
+  flashAllLEDs(300);
+  
+  Serial.println("System ready! Press any level button to begin.");
+}
