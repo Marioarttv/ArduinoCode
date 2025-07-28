@@ -1,0 +1,58 @@
+// Bibliotheken einbinden
+#include <Wire.h>               // I2C-Kommunikation für das LCD
+#include <LiquidCrystal_I2C.h>  // LCD-Display mit I2C-Interface
+
+// Pin-Definitionen und Variablen
+int eingang = A0;        // Analoger Eingang A0 für Sensor
+int LED = 13;            // Onboard-LED an Pin 13
+int sensorwert = 0;      // Variable für den gelesenen Sensorwert
+int t = 750;             // Delay-Zeit in Millisekunden
+
+// LCD-Objekt erstellen (I2C-Adresse 0x27, 16 Zeichen, 2 Zeilen)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  // Serielle Kommunikation mit 9600 Baud starten
+  Serial.begin(9600);
+  
+  // LED-Pin als Ausgang konfigurieren
+  pinMode(LED, OUTPUT);
+  
+  // LCD initialisieren und Hintergrundbeleuchtung einschalten
+  lcd.init();              
+  lcd.backlight();         
+}
+
+void loop() {
+  // Analogwert vom Sensor lesen (0-1023)
+  sensorwert = analogRead(eingang);
+  
+  // Sensorwert über serielle Schnittstelle ausgeben
+  Serial.println("Sensorwert:");
+  Serial.println(sensorwert);
+  
+  // Prüfen ob Sensorwert über Schwellwert (900) liegt
+  if (sensorwert > 900) {
+    // LED blinken lassen
+    digitalWrite(LED, HIGH);  // LED einschalten
+    delay(200);               // 200ms warten
+    digitalWrite(LED, LOW);   // LED ausschalten
+    delay(200);               // 200ms warten
+    
+    // LCD Display aktualisieren
+    lcd.clear();              // Display löschen
+    lcd.setCursor(0, 0);      // Cursor auf Position 0,0 (erste Zeile)
+    lcd.print("Code:");       // Text "Code:" anzeigen
+    lcd.setCursor(0, 1);      // Cursor auf Position 0,1 (zweite Zeile)
+    lcd.print("756.250");     // Zahlenwert anzeigen
+  }
+  else {
+    // Wenn Sensorwert unter Schwellwert liegt
+    lcd.clear();              // Display löschen
+    lcd.setCursor(0, 0);      // Cursor auf erste Zeile setzen
+    lcd.print("1.Moses 1:3");  // Bibelvers anzeigen
+  }
+  
+  // Pause von 750ms vor nächstem Durchlauf
+  delay(t);
+}
