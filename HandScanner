@@ -1,0 +1,233 @@
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+
+// Keypad setup - no external library needed
+const byte ROWS = 4; 
+const byte COLS = 4; 
+
+// CORRECT LAYOUT for your specific keypad
+char keys[ROWS][COLS] = {
+  {'D','C','B','A'},
+  {'#','9','6','3'},
+  {'0','8','5','2'},
+  {'*','7','4','1'}
+};
+
+// Connect keypad pins to digital pins 2-9
+byte rowPins[ROWS] = {2, 3, 4, 5}; // Row pinouts of the keypad
+byte colPins[COLS] = {6, 7, 8, 9}; // Column pinouts of the keypad
+
+// I2C LCD setup (same as your light project)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// LED pins
+const int greenLED = 11;
+const int redLED = 10;
+
+// Password variables
+String correctPassword = "8036";
+String enteredPassword = "";
+bool passwordCorrect = false;
+
+// Keypad variables
+char lastKey = 0;
+unsigned long lastKeyTime = 0;
+const unsigned long debounceDelay = 200; // Debounce delay in milliseconds
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Initialize keypad pins
+  for (int i = 0; i < ROWS; i++) {
+    pinMode(rowPins[i], OUTPUT);
+    digitalWrite(rowPins[i], HIGH);
+  }
+  for (int i = 0; i < COLS; i++) {
+    pinMode(colPins[i], INPUT_PULLUP);
+  }
+  
+  // Initialize I2C LCD (same as your light project)
+  lcd.init();              // LCD initialisieren
+  lcd.backlight();         // Hintergrundbeleuchtung einschalten
+  
+  Serial.println("I2C LCD initialized - testing display...");
+  
+  // Test LCD display
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("LCD Test OK");
+  delay(2000);
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Enter Code:");
+  lcd.setCursor(0, 1);
+  lcd.print("****");
+  
+  Serial.println("LCD should now show 'Enter Code:' and '****'");
+  
+  // Initialize LED pins
+  pinMode(greenLED, OUTPUT);
+  pinMode(redLED, OUTPUT);
+  
+  // Turn off both LEDs initially
+  digitalWrite(greenLED, LOW);
+  digitalWrite(redLED, LOW);
+  
+  Serial.println("Escape Room Keypad Ready");
+  Serial.println("Enter password: 8036");
+  Serial.println("Press '*' to reset/clear");
+  Serial.println("=== KEYPAD MAPPING DEBUG ===");
+  Serial.println("Press each key to see row/col mapping:");
+  Serial.println("If numbers don't match, check keymap array!");
+}
+
+void loop() {
+  char key = getKey();
+  
+  if (key != 0 && key != lastKey && (millis() - lastKeyTime) > debounceDelay) {
+    lastKey = key;
+    lastKeyTime = millis();
+    
+    Serial.print("Key pressed: ");
+    Serial.println(key);
+    
+    // Only accept numeric keys for password
+    if (key >= '0' && key <= '9') {
+      enteredPassword += key;
+      
+      // Update LCD display with asterisks
+      lcd.setCursor(0, 1);
+      String displayString = "";
+      for (int i = 0; i < enteredPassword.length() && i < 4; i++) {
+        displayString += "*";
+      }
+      // Pad with spaces to clear previous characters
+      while (displayString.length() < 4) {
+        displayString += " ";
+      }
+      lcd.print(displayString);
+      
+      // Check if we have 4 digits
+      if (enteredPassword.length() >= 4) {
+        checkPassword();
+      }
+    }
+    // Clear/reset with * key
+    else if (key == '*') {
+      resetSystem();
+    }
+    // Enter/confirm with # key
+    else if (key == '#') {
+      if (enteredPassword.length() > 0) {
+        checkPassword();
+      }
+    }
+  }
+  
+  // Reset lastKey if no key is pressed
+  if (getKey() == 0) {
+    lastKey = 0;
+  }
+}
+
+char getKey() {
+  char key = 0;
+  
+  for (int row = 0; row < ROWS; row++) {
+    // Set current row to LOW
+    digitalWrite(rowPins[row], LOW);
+    
+    for (int col = 0; col < COLS; col++) {
+      // Check if column pin is LOW (button pressed)
+      if (digitalRead(colPins[col]) == LOW) {
+        key = keys[row][col];
+        // DEBUG: Show which row/column was pressed
+        Serial.print("DEBUG: Row ");
+        Serial.print(row);
+        Serial.print(", Col ");
+        Serial.print(col);
+        Serial.print(" = Key '");
+        Serial.print(key);
+        Serial.println("'");
+        break;
+      }
+    }
+    
+    // Set row back to HIGH
+    digitalWrite(rowPins[row], HIGH);
+    
+    if (key != 0) break;
+  }
+  
+  return key;
+}
+
+void checkPassword() {
+  Serial.print("Checking password: '");
+  Serial.print(enteredPassword);
+  Serial.println("'");
+  
+  if (enteredPassword == correctPassword) {
+    // Correct password!
+    passwordCorrect = true;
+    digitalWrite(greenLED, HIGH);
+    digitalWrite(redLED, LOW);
+    
+    Serial.println("SUCCESS! Password correct: " + enteredPassword);
+    Serial.println("Attempting to display final code on LCD...");
+    
+    // Display success message and final password
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ACCESS GRANTED!");
+    lcd.setCursor(0, 1);
+    lcd.print("088.500");
+    
+    Serial.println("LCD should show: 'ACCESS GRANTED!' and '088.500'");
+    Serial.println("Final code displayed: 088.500");
+    
+    // Keep the success state - don't reset automatically
+  } else {
+    // Wrong password
+    digitalWrite(redLED, HIGH);
+    digitalWrite(greenLED, LOW);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ACCESS DENIED!");
+    lcd.setCursor(0, 1);
+    lcd.print("Try Again...");
+    
+    Serial.println("FAILED! Wrong password: " + enteredPassword);
+    
+    // Flash red LED
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(redLED, HIGH);
+      delay(200);
+      digitalWrite(redLED, LOW);
+      delay(200);
+    }
+    
+    // Reset after showing error
+    delay(2000);
+    resetSystem();
+  }
+}
+
+void resetSystem() {
+  if (!passwordCorrect) { // Don't reset if password was correct
+    enteredPassword = "";
+    digitalWrite(greenLED, LOW);
+    digitalWrite(redLED, LOW);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Enter Code:");
+    lcd.setCursor(0, 1);
+    lcd.print("****");
+    
+    Serial.println("System reset - cleared entry");
+    Serial.println("Press '*' to reset anytime");
+  }
+}
