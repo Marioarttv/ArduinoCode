@@ -1,0 +1,208 @@
+// Bibliotheken für RFID-Reader, SPI-Kommunikation und LCD-Display
+#include <SPI.h>              // SPI-Kommunikation zwischen Arduino und RFID-Reader
+#include <MFRC522.h>          // MFRC522 RFID-Reader Bibliothek
+#include <Wire.h>             // I2C-Kommunikation für LCD
+#include <LiquidCrystal_I2C.h>// I2C LCD-Display Bibliothek
+
+// Pin-Definitionen für RFID-Reader
+#define SS_PIN 10             // Slave Select Pin für SPI-Kommunikation
+#define RST_PIN 9             // Reset Pin für RFID-Reader
+#define MAX_RETRIES 3         // Maximale Anzahl Wiederholungsversuche beim Lesen
+
+// Objekte erstellen
+MFRC522 mfrc522(SS_PIN, RST_PIN);        // RFID-Reader Objekt
+LiquidCrystal_I2C lcd(0x27, 16, 2);      // LCD-Display (I2C-Adresse 0x27, 16x2)
+
+// RFID-Karten Parameter
+byte block = 1;                // Block 1 der RFID-Karte für Lese-/Schreiboperationen
+byte readBuffer[18];           // Puffer für gelesene Daten (16 Byte Daten + 2 Byte CRC)
+byte bufferSize = sizeof(readBuffer);  // Größe des Lese-Puffers
+MFRC522::MIFARE_Key key;       // Authentifizierungs-Schlüssel für MIFARE-Karten
+
+void setup() {
+  // Kommunikation initialisieren
+  Serial.begin(9600);          // Serielle Verbindung zum PC mit 9600 Baud
+  SPI.begin();                 // SPI-Kommunikation für RFID-Reader starten
+  mfrc522.PCD_Init();          // RFID-Reader initialisieren
+  
+  // LCD-Display initialisieren
+  lcd.init();                  // LCD initialisieren
+  lcd.backlight();             // Hintergrundbeleuchtung einschalten
+  lcd.setCursor(0, 0);         // Cursor auf erste Zeile setzen
+  lcd.print(">> Lesemodus <<"); // Startmeldung anzeigen
+  
+  // Serielle Ausgabe für Debugging
+  Serial.println(">> RFID-Lesemodus <<");
+  Serial.println("Lege eine Karte auf, um den gespeicherten Text zu lesen.");
+  
+  // Standard MIFARE-Schlüssel initialisieren (alle Bytes auf 0xFF)
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+  
+  // Lese-Puffer mit Nullen initialisieren
+  memset(readBuffer, 0, sizeof(readBuffer));
+  
+  delay(2000);                 // Kurze Pause für LCD-Anzeige
+  showWaitingMessage();        // Wartenachricht anzeigen
+}
+
+void loop() {
+  // Prüfen ob eine neue Karte in Reichweite ist
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;                    // Keine Karte vorhanden, Schleife wiederholen
+  }
+  
+  // Versuchen die Karten-UID zu lesen
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;                    // Karte konnte nicht gelesen werden
+  }
+  
+  // Karte wurde erkannt - Lese-Prozess starten
+  Serial.println("Karte erkannt - versuche zu lesen...");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Karte erkannt...");
+  
+  // Mehrere Leseversuche für robuste Funktionalität
+  bool readSuccess = false;
+  
+  // Schleife für Wiederholungsversuche
+  for (int attempt = 1; attempt <= MAX_RETRIES && !readSuccess; attempt++) {
+    Serial.print("Leseversuch ");
+    Serial.print(attempt);
+    Serial.print(" von ");
+    Serial.println(MAX_RETRIES);
+    
+    // Puffer vor jedem Versuch zurücksetzen
+    memset(readBuffer, 0, sizeof(readBuffer));
+    bufferSize = sizeof(readBuffer);
+    
+    // Authentifizierung mit der Karte (erforderlich für MIFARE-Karten)
+    MFRC522::StatusCode status = mfrc522.PCD_Authenticate(
+      MFRC522::PICC_CMD_MF_AUTH_KEY_A,    // Authentifizierungs-Kommando (Key A)
+      block,                              // Block-Nummer
+      &key,                               // Authentifizierungs-Schlüssel
+      &(mfrc522.uid)                      // Karten-UID
+    );
+    
+    // Prüfen ob Authentifizierung erfolgreich war
+    if (status != MFRC522::STATUS_OK) {
+      Serial.print("Authentifizierungsfehler (Versuch ");
+      Serial.print(attempt);
+      Serial.print("): ");
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      
+      // Bei letztem Versuch Fehler anzeigen und abbrechen
+      if (attempt == MAX_RETRIES) {
+        showError("Auth-Fehler!", "Karte pruefen");
+        aufraeumen();
+        return;
+      }
+      delay(100);                         // Kurze Pause vor nächstem Versuch
+      continue;                           // Nächster Versuch
+    }
+    
+    // Daten aus dem Block lesen
+    status = mfrc522.MIFARE_Read(block, readBuffer, &bufferSize);
+    
+    // Prüfen ob Lesevorgang erfolgreich war
+    if (status != MFRC522::STATUS_OK) {
+      Serial.print("Lesefehler (Versuch ");
+      Serial.print(attempt);
+      Serial.print("): ");
+      Serial.println(mfrc522.GetStatusCodeName(status));
+      
+      // Bei letztem Versuch Fehler anzeigen und abbrechen
+      if (attempt == MAX_RETRIES) {
+        showError("Lesefehler!", "Erneut versuchen");
+        aufraeumen();
+        return;
+      }
+      delay(100);                         // Kurze Pause vor nächstem Versuch
+      continue;                           // Nächster Versuch
+    }
+    
+    // Lesevorgang war erfolgreich
+    readSuccess = true;
+    Serial.println("Lesevorgang erfolgreich!");
+  }
+  
+  // Wenn Lesen erfolgreich, Daten anzeigen
+  if (readSuccess) {
+    displayReadData();
+  }
+  
+  // Aufräumen und für nächste Karte vorbereiten
+  aufraeumen();
+}
+
+// Funktion zur Anzeige der gelesenen Daten
+void displayReadData() {
+  Serial.print(">> Gelesener Text: ");
+  
+  // LCD für Ausgabe vorbereiten
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Gelesen:");
+  lcd.setCursor(0, 1);
+  
+  // Prüfen ob gültige Daten vorhanden sind
+  bool hasValidData = false;
+  for (byte i = 0; i < 16; i++) {
+    // Prüfen auf nicht-leere und nicht-initialisierte Bytes
+    if (readBuffer[i] != 0x00 && readBuffer[i] != 0xFF) {
+      hasValidData = true;
+      break;
+    }
+  }
+  
+  // Wenn keine gültigen Daten gefunden
+  if (!hasValidData) {
+    Serial.println("(Keine gültigen Daten gefunden)");
+    lcd.print("Keine Daten");
+    return;
+  }
+  
+  // Ausgabe der Daten - nur druckbare ASCII-Zeichen
+  for (byte i = 0; i < 16; i++) {
+    char c = readBuffer[i];
+    
+    // Nur druckbare ASCII-Zeichen anzeigen (32-126)
+    if (c >= 32 && c <= 126) {
+      Serial.write(c);                    // Ausgabe über serielle Schnittstelle
+      if (i < 16) {                       // LCD hat nur 16 Zeichen pro Zeile
+        lcd.write(c);                     // Ausgabe auf LCD
+      }
+    } else if (c == 0) {
+      break;                              // String-Ende erreicht
+    }
+  }
+  Serial.println();                       // Neue Zeile in serieller Ausgabe
+}
+
+// Funktion zur Anzeige von Fehlermeldungen
+void showError(const char* line1, const char* line2) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);                       // Erste Fehlerzeile
+  lcd.setCursor(0, 1);
+  lcd.print(line2);                       // Zweite Fehlerzeile
+  delay(3000);                            // Länger anzeigen für bessere Lesbarkeit
+}
+
+// Funktion zur Anzeige der Wartennachricht
+void showWaitingMessage() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Warte auf Karte...");
+}
+
+// Aufräum-Funktion nach jedem Kartenvorgang
+void aufraeumen() {
+  mfrc522.PICC_HaltA();                   // Karte in Schlafmodus versetzen
+  mfrc522.PCD_StopCrypto1();              // Kryptographie-Einheit stoppen
+  delay(4000);                            // Zeit zum Lesen der Anzeige
+  showWaitingMessage();                   // Zurück zur Warteanzeige
+  Serial.println("Bereit für nächste Karte...");
+}
