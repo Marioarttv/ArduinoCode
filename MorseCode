@@ -1,0 +1,309 @@
+// Multi-Message Morsecode-Player für Arduino/Funduino Escape Room
+// 4 Buttons für 4 verschiedene thematische Nachrichten
+// Mit Mario Bros Startup-Melodie und Button-Initialisierung Fix
+
+// Pin-Definitionen
+const int button1Pin = 4;    // Button 1: "ARIA"
+const int button2Pin = 5;    // Button 2: "DAUGHTER"
+const int button3Pin = 11;    // Button 3: "OFFICE HAS KEY"
+const int button4Pin = 12;    // Button 4: "LIVE FOR BOTH OF US"
+const int ledPin = 13;       // LED an Pin 13 (eingebaute LED)
+const int buzzerPin = 8;     // Buzzer an Pin 8
+
+// Morse-Code Timing-Konstanten (benutzerfreundlich für Escape Room)
+const int dotTime = 200;        // Länge eines Punktes in ms (langsamer für Anfänger)
+const int dashTime = 800;       // Länge eines Strichs in ms (3x Punkt)
+const int symbolPause = 300;    // Pause zwischen Punkt/Strich
+const int letterPause = 900;    // Pause zwischen Buchstaben (3x Punkt)
+const int wordPause = 2100;     // Pause zwischen Wörtern (7x Punkt)
+
+// Vorbereitungszeit
+const int preparationTime = 1000;  // 1 Sekunde einfache Pause
+
+// Die 4 verkürzten Escape Room Nachrichten (benutzerfreundlicher)
+String message1 = "ARIA";                    // Kurze Nachricht (4 Buchstaben)
+String message2 = "DAUGHTER";                // Mittlere Nachricht (8 Buchstaben)
+String message3 = "OFFICE HAS KEY";          // Hinweis-Nachricht (12 Zeichen)
+String message4 = "LIVE FOR BOTH OF US";     // Finale emotionale Nachricht (17 Zeichen)
+
+// Button-Zustandsspeicher für Edge-Detection
+bool lastButton1State = false;
+bool lastButton2State = false;
+bool lastButton3State = false;
+bool lastButton4State = false;
+bool isPlaying = false;  // Verhindert Überlappung von Nachrichten
+
+// Vollständiges Morse-Alphabet (A-Z)
+String morseTable[26] = {
+  ".-",   // A (Dit-Dah)
+  "-...", // B (Dah-Dit-Dit-Dit)
+  "-.-.", // C (Dah-Dit-Dah-Dit)
+  "-..",  // D (Dah-Dit-Dit)
+  ".",    // E (Dit)
+  "..-.", // F (Dit-Dit-Dah-Dit)
+  "--.",  // G (Dah-Dah-Dit)
+  "....", // H (Dit-Dit-Dit-Dit)
+  "..",   // I (Dit-Dit)
+  ".---", // J (Dit-Dah-Dah-Dah)
+  "-.-",  // K (Dah-Dit-Dah)
+  ".-..", // L (Dit-Dah-Dit-Dit)
+  "--",   // M (Dah-Dah)
+  "-.",   // N (Dah-Dit)
+  "---",  // O (Dah-Dah-Dah)
+  ".--.", // P (Dit-Dah-Dah-Dit)
+  "--.-", // Q (Dah-Dah-Dit-Dah)
+  ".-.",  // R (Dit-Dah-Dit)
+  "...",  // S (Dit-Dit-Dit)
+  "-",    // T (Dah)
+  "..-",  // U (Dit-Dit-Dah)
+  "...-", // V (Dit-Dit-Dit-Dah)
+  ".--",  // W (Dit-Dah-Dah)
+  "-..-", // X (Dah-Dit-Dit-Dah)
+  "-.--", // Y (Dah-Dit-Dah-Dah)
+  "--.."  // Z (Dah-Dah-Dit-Dit)
+};
+
+void setup() {
+  // Pin-Modi definieren - alle Buttons mit Pull-up
+  pinMode(button1Pin, INPUT_PULLUP);
+  pinMode(button2Pin, INPUT_PULLUP);
+  pinMode(button3Pin, INPUT_PULLUP);
+  pinMode(button4Pin, INPUT_PULLUP);
+  pinMode(ledPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  
+  // Serielle Kommunikation für Debugging und Thematik
+  Serial.begin(9600);
+  Serial.println("=== EMERGENCY COMMUNICATION STATION ===");
+  Serial.println("Multi-Message Morsecode-Player gestartet!");
+  Serial.println();
+  Serial.println("Available Transmissions:");
+  Serial.println("Button 1 (Pin 2): " + message1 + " (4 letters)");
+  Serial.println("Button 2 (Pin 3): " + message2 + " (8 letters)");
+  Serial.println("Button 3 (Pin 4): " + message3 + " (12 characters)");
+  Serial.println("Button 4 (Pin 5): " + message4 + " (17 characters)");
+  Serial.println();
+  Serial.println("Initializing communication system...");
+  
+  // Mario Bros Startup-Melodie
+  playMarioStartup();
+  
+  // Button-States richtig initialisieren (nach Startup-Melodie)
+  lastButton1State = !digitalRead(button1Pin);
+  lastButton2State = !digitalRead(button2Pin);
+  lastButton3State = !digitalRead(button3Pin);
+  lastButton4State = !digitalRead(button4Pin);
+  
+  Serial.println("System ready for transmission...");
+}
+
+void loop() {
+  // Alle Button-Zustände lesen (invertiert wegen INPUT_PULLUP)
+  bool currentButton1State = !digitalRead(button1Pin);
+  bool currentButton2State = !digitalRead(button2Pin);
+  bool currentButton3State = !digitalRead(button3Pin);
+  bool currentButton4State = !digitalRead(button4Pin);
+  
+  // Nur reagieren wenn gerade keine Wiedergabe läuft (Überlappungsschutz)
+  if (!isPlaying) {
+    
+    // Button 1: Emotionale Nachricht
+    if (currentButton1State && !lastButton1State) {
+      Serial.println(">>> BUTTON 1 PRESSED <<<");
+      Serial.println("Preparing to transmit: " + message1);
+      delay(preparationTime);  // 1 Sekunde Pause
+      Serial.println(">>> TRANSMITTING <<<");
+      playTextMessage(message1);
+      Serial.println(">>> TRANSMISSION COMPLETE <<<");
+      Serial.println();
+    }
+    
+    // Button 2: Technische Notfall-Nachricht
+    if (currentButton2State && !lastButton2State) {
+      Serial.println(">>> BUTTON 2 PRESSED <<<");
+      Serial.println("Preparing to transmit: " + message2);
+      delay(preparationTime);  // 1 Sekunde Pause
+      Serial.println(">>> TRANSMITTING <<<");
+      playTextMessage(message2);
+      Serial.println(">>> TRANSMISSION COMPLETE <<<");
+      Serial.println();
+    }
+    
+    // Button 3: Hinweis-Nachricht
+    if (currentButton3State && !lastButton3State) {
+      Serial.println(">>> BUTTON 3 PRESSED <<<");
+      Serial.println("Preparing to transmit: " + message3);
+      delay(preparationTime);  // 1 Sekunde Pause
+      Serial.println(">>> TRANSMITTING <<<");
+      playTextMessage(message3);
+      Serial.println(">>> TRANSMISSION COMPLETE <<<");
+      Serial.println();
+    }
+    
+    // Button 4: Finale Nachricht
+    if (currentButton4State && !lastButton4State) {
+      Serial.println(">>> BUTTON 4 PRESSED <<<");
+      Serial.println("Preparing to transmit: " + message4);
+      delay(preparationTime);  // 1 Sekunde Pause
+      Serial.println(">>> TRANSMITTING <<<");
+      playTextMessage(message4);
+      Serial.println(">>> TRANSMISSION COMPLETE <<<");
+      Serial.println();
+    }
+  }
+  
+  // Button-Status für nächsten Loop-Durchlauf speichern
+  lastButton1State = currentButton1State;
+  lastButton2State = currentButton2State;
+  lastButton3State = currentButton3State;
+  lastButton4State = currentButton4State;
+}
+
+// Mario Bros Startup-Melodie - verhindert Button-Probleme beim Start
+void playMarioStartup() {
+  Serial.println("♪ Playing Mario Bros Startup Theme ♪");
+  
+  // Mario Bros Hauptthema - vereinfachte Version
+  // Frequenzen für die Noten
+  int E5 = 659;   // E5
+  int C5 = 523;   // C5
+  int G5 = 784;   // G5
+  int G4 = 392;   // G4
+  
+  // Timing
+  int noteTime = 300;  // Etwas langsamer für entspannteres Gefühl
+  int pauseTime = 100;
+  
+  // Mario Melodie: E5-E5-E5-C5-E5-G5-G4
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, E5);
+  delay(noteTime);
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(pauseTime);
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, E5);
+  delay(noteTime);
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(pauseTime);
+  
+  delay(noteTime); // Pause
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, E5);
+  delay(noteTime);
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(pauseTime);
+  
+  delay(noteTime); // Pause
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, C5);
+  delay(noteTime);
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(pauseTime);
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, E5);
+  delay(noteTime);
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(pauseTime);
+  
+  delay(noteTime); // Pause
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, G5);
+  delay(noteTime * 2); // Längere Note
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  delay(noteTime);
+  
+  digitalWrite(ledPin, HIGH);
+  tone(buzzerPin, G4);
+  delay(noteTime * 2); // Längere Note
+  noTone(buzzerPin);
+  digitalWrite(ledPin, LOW);
+  
+  delay(500); // Pause am Ende
+  Serial.println("♪ Startup theme complete - System ready! ♪");
+}
+
+// Hauptfunktion: Konvertiert Text-Nachricht zu Morsecode und spielt ab
+void playTextMessage(String text) {
+  isPlaying = true;  // Spielstatus setzen
+  
+  // Jeden Buchstaben der Nachricht durchgehen
+  for (int i = 0; i < text.length(); i++) {
+    char currentChar = text.charAt(i);
+    
+    if (currentChar == ' ') {
+      // Leerzeichen = Wort-Pause (längste Pause)
+      delay(wordPause);
+      Serial.print(" / ");  // Visuelle Trennung in Serial-Output
+      
+    } else if (currentChar >= 'A' && currentChar <= 'Z') {
+      // Buchstabe in Morsecode umwandeln
+      int index = currentChar - 'A';  // ASCII zu Array-Index
+      String morse = morseTable[index];
+      
+      // Debug-Output: Buchstabe + Morse-Äquivalent
+      Serial.print(currentChar);
+      Serial.print("(");
+      Serial.print(morse);
+      Serial.print(") ");
+      
+      // Morse-Sequenz für diesen Buchstaben abspielen
+      playMorseSequence(morse);
+      delay(letterPause);  // Pause zwischen Buchstaben
+    }
+    // Andere Zeichen werden ignoriert
+  }
+  
+  Serial.println();  // Neue Zeile nach kompletter Nachricht
+  isPlaying = false; // Spielstatus zurücksetzen
+}
+
+// Spielt eine einzelne Morse-Sequenz ab (nur Punkte und Striche)
+void playMorseSequence(String morse) {
+  for (int i = 0; i < morse.length(); i++) {
+    char symbol = morse.charAt(i);
+    
+    if (symbol == '.') {
+      // Punkt (Dit) abspielen
+      digitalWrite(ledPin, HIGH);      // LED einschalten
+      tone(buzzerPin, 800);           // 800 Hz Ton starten
+      delay(dotTime);                 // Punkt-Dauer (300ms - benutzerfreundlich)
+      digitalWrite(ledPin, LOW);       // LED ausschalten
+      noTone(buzzerPin);              // Ton stoppen
+      delay(symbolPause);             // Pause zwischen Symbolen
+      
+    } else if (symbol == '-') {
+      // Strich (Dah) abspielen
+      digitalWrite(ledPin, HIGH);      // LED einschalten
+      tone(buzzerPin, 800);           // 800 Hz Ton starten
+      delay(dashTime);                // Strich-Dauer (900ms = 3x Punkt)
+      digitalWrite(ledPin, LOW);       // LED ausschalten
+      noTone(buzzerPin);              // Ton stoppen
+      delay(symbolPause);             // Pause zwischen Symbolen
+    }
+  }
+}
+
+// Hilfsfunktion: Text zu Großbuchstaben konvertieren (falls nötig)
+String toUpperCase(String text) {
+  String result = "";
+  for (int i = 0; i < text.length(); i++) {
+    char c = text.charAt(i);
+    if (c >= 'a' && c <= 'z') {
+      result += (char)(c - 32);  // ASCII-Verschiebung: a->A
+    } else {
+      result += c;  // Bereits Großbuchstabe oder anderes Zeichen
+    }
+  }
+  return result;
+}
